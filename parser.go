@@ -30,10 +30,8 @@ func Parse(urls, searchUrl string) {
 	for _, url := range urlList {
 		wg.Add(1)
 
-		timeout := make(chan string, 1)
 		go func(targetUrl string, substringRegExp *regexp.Regexp) {
 			<-limiter
-			time.Sleep(4 * time.Second)
 			defer wg.Done()
 
 			resp, err := client.Get(targetUrl)
@@ -55,18 +53,9 @@ func Parse(urls, searchUrl string) {
 					matches := findSubstringRegExp.FindAllStringIndex(html, -1)
 					matchesCount = len(matches)
 				}
-				timeout <- "hello"
 				result[targetUrl] = matchesCount
 			}
 		}(url, findSubstringRegExp)
-
-		select {
-		case res := <-timeout:
-			fmt.Println(res)
-		case <-time.After(500 * time.Millisecond):
-			fmt.Println("timeout")
-		}
-
 	}
 	wg.Wait()
 
