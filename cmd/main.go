@@ -4,6 +4,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+
+	"github.com/fukpig/parser-cli"
 )
 
 func main() {
@@ -21,5 +23,5 @@ func main() {
 		os.Exit(1)
 	}
 
-	parse(*urls, *searchUrl)
+	parser.Parse(*urls, *searchUrl)
 }
