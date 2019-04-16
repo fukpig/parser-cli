@@ -3,7 +3,7 @@ dist: xenial
 language: go
 env:
   - GO111MODULE=on
-  - GOFLAGS='-race'
+#  - GOFLAGS='-race'
 go:
   - 1.12.x
 git:
