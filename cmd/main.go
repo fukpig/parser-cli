@@ -10,7 +10,7 @@ import (
 
 func main() {
 	urls := flag.String("urls", "", "a string")
-	searchUrl := flag.String("search", "", "a string")
+	searchURL := flag.String("search", "", "a string")
 	flag.Parse()
 
 	if *urls == "" {
@@ -18,10 +18,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	if *searchUrl == "" {
+	if *searchURL == "" {
 		fmt.Println("search url is empty")
 		os.Exit(1)
 	}
 
-	parser.Parse(*urls, *searchUrl)
+	parser.Parse(*urls, *searchURL)
 }

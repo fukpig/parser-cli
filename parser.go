@@ -10,17 +10,20 @@ import (
 	"time"
 )
 
-func Parse(urls, searchUrl string) {
+const MaxGoroutines = 2
+
+func Parse(urls, searchURL string) {
+
+	limiter := make(chan int, MaxGoroutines)
 
 	result := make(map[string]int)
 
 	urlList := strings.Split(urls, ",")
 
-	findSubstringRegExp := regexp.MustCompile(searchUrl)
-
-	limiter := time.Tick(time.Second * 1)
+	findSubstringRegExp := regexp.MustCompile(searchURL)
 
 	var wg sync.WaitGroup
+	var lock = sync.RWMutex{}
 
 	timeout := time.Duration(5 * time.Second)
 	client := http.Client{
@@ -29,9 +32,10 @@ func Parse(urls, searchUrl string) {
 
 	for _, url := range urlList {
 		wg.Add(1)
-
 		go func(targetUrl string, substringRegExp *regexp.Regexp) {
-			<-limiter
+			defer wg.Done()
+			defer lock.Unlock()
+			limiter <- 1
 
 			resp, err := client.Get(targetUrl)
 			if err != nil {
@@ -49,15 +53,16 @@ func Parse(urls, searchUrl string) {
 				html := string(html)
 				matchesCount := 0
 				if html != "" {
-					matches := findSubstringRegExp.FindAllStringIndex(html, -1)
+					matches := substringRegExp.FindAllStringIndex(html, -1)
 					matchesCount = len(matches)
 				}
+				lock.Lock()
 				result[targetUrl] = matchesCount
-				wg.Done()
 			}
+			<-limiter
 		}(url, findSubstringRegExp)
-		wg.Wait()
 	}
+	wg.Wait()
 
 	for key, value := range result {
 		fmt.Println(key, " - ", value)
