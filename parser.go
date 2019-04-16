@@ -25,7 +25,7 @@ func Parse(urls, searchURL string) {
 	var wg sync.WaitGroup
 	var lock = sync.RWMutex{}
 
-	timeout := time.Duration(5 * time.Second)
+	timeout := 5 * time.Second
 	client := http.Client{
 		Timeout: timeout,
 	}
