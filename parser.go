@@ -32,7 +32,6 @@ func Parse(urls, searchUrl string) {
 
 		go func(targetUrl string, substringRegExp *regexp.Regexp) {
 			<-limiter
-			defer wg.Done()
 
 			resp, err := client.Get(targetUrl)
 			if err != nil {
@@ -54,10 +53,11 @@ func Parse(urls, searchUrl string) {
 					matchesCount = len(matches)
 				}
 				result[targetUrl] = matchesCount
+				wg.Done()
 			}
 		}(url, findSubstringRegExp)
+		wg.Wait()
 	}
-	wg.Wait()
 
 	for key, value := range result {
 		fmt.Println(key, " - ", value)
