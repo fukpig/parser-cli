@@ -15,7 +15,7 @@ notifications:
     on_success: change
     on_failure: always
 before_script:
-  - curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $(go env GOPATH)/bin 1.16.0
+  - curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $(go env GOPATH)/bin latest
 script:
   - golangci-lint run
   - go test -v -race ./...
