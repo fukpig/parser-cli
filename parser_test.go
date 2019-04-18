@@ -1,28 +1,37 @@
-package parser
+package parsercli
 
 import (
-	"bytes"
 	"fmt"
-	"log"
 	"net/http"
 	"net/http/httptest"
-	"os"
+	"regexp"
 	"testing"
 )
 
-func TestParseUrl(t *testing.T) {
+func TestScrappingWithHref(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		fmt.Fprintln(w, `<html><head><head><body><a href="123">Hello</a><h1>Test</h1></body></html>`)
 	}))
 	defer ts.Close()
 
-	var buf bytes.Buffer
-	log.SetOutput(&buf)
+	findSubstringRegExp := regexp.MustCompile("href")
 
-	urls := ts.URL
-	searchURL := "href"
-	Parse(urls, searchURL)
-	log.SetOutput(os.Stdout)
-	fmt.Println("1" + buf.String() + "2")
+	if result := scrapCount(ts.Client(), ts.URL, findSubstringRegExp); result != 1 {
+		t.Errorf("Expected count hrefs of 1, but it was %d .", result)
+	}
+}
+
+func TestScrappingWithoutHref(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprintln(w, `<html><head><head><body><a>Hello</a><h1>Test</h1></body></html>`)
+	}))
+	defer ts.Close()
+
+	findSubstringRegExp := regexp.MustCompile("href")
+
+	if result := scrapCount(ts.Client(), ts.URL, findSubstringRegExp); result != 0 {
+		t.Errorf("Expected count hrefs of 0, but it was %d .", result)
+	}
 }

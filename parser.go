@@ -1,5 +1,5 @@
-// Package parser was built for parsing url for search string
-package parser
+// Package parsercli was built for parsing url for search string
+package parsercli
 
 import (
 	"fmt"
@@ -11,19 +11,43 @@ import (
 	"time"
 )
 
-const maxGoroutines = 2
-
 type resultStruct struct {
 	urlsWithCount map[string]int
 	locker        sync.RWMutex
 }
 
-func readFromLimiter(limiterCh chan struct{}) {
-	<-limiterCh
+//render generate output Url - count
+func render(urlsResult map[string]int) {
+	for key, value := range urlsResult {
+		fmt.Println(key, " - ", value)
+	}
+}
+
+//scrapCount get html by url and find by regexp count matches
+func scrapCount(client *http.Client, targetURL string, substringRegExp *regexp.Regexp) int {
+	resp, err := client.Get(targetURL)
+	if err != nil {
+		fmt.Println(err)
+		return 0
+	}
+	defer resp.Body.Close()
+	htmlBytes, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Println(err)
+		return 0
+	}
+
+	html := string(htmlBytes)
+	matchesCount := 0
+	if html != "" {
+		matches := substringRegExp.FindAllStringIndex(html, -1)
+		matchesCount = len(matches)
+	}
+	return matchesCount
 }
 
 //Parse get array of urls and parse them to find occurrences of search string
-func Parse(urls, searchURL string) {
+func Parse(urls, searchURL string, maxGoroutines int) {
 
 	limiter := make(chan struct{}, maxGoroutines)
 
@@ -34,47 +58,27 @@ func Parse(urls, searchURL string) {
 	var wg sync.WaitGroup
 
 	timeout := 5 * time.Second
-	client := http.Client{
+	client := &http.Client{
 		Timeout: timeout,
 	}
 
-	result := resultStruct{urlsWithCount: make(map[string]int)}
+	result := resultStruct{urlsWithCount: make(map[string]int, len(urlList))}
 	for _, url := range urlList {
 		wg.Add(1)
-		go func(targetUrl string, substringRegExp *regexp.Regexp) {
+		go func(targetURL string, substringRegExp *regexp.Regexp) {
 			defer wg.Done()
 			defer result.locker.Unlock()
-			defer readFromLimiter(limiter)
+			defer func(ch <-chan struct{}) {
+				<-ch
+			}(limiter)
 			limiter <- struct{}{}
 
-			resp, err := client.Get(targetUrl)
-			if err != nil {
-				fmt.Println(err)
-				result.urlsWithCount[targetUrl] = 0
-			}
-			defer resp.Body.Close()
-			html, err := ioutil.ReadAll(resp.Body)
-			if err != nil {
-				fmt.Println(err)
-				result.urlsWithCount[targetUrl] = 0
-			}
+			result.locker.Lock()
+			result.urlsWithCount[targetURL] = scrapCount(client, targetURL, substringRegExp)
 
-			if err == nil {
-				html := string(html)
-				matchesCount := 0
-				if html != "" {
-					matches := substringRegExp.FindAllStringIndex(html, -1)
-					matchesCount = len(matches)
-				}
-				result.locker.Lock()
-
-				result.urlsWithCount[targetUrl] = matchesCount
-			}
 		}(url, findSubstringRegExp)
 	}
 	wg.Wait()
 
-	for key, value := range result.urlsWithCount {
-		fmt.Println(key, " - ", value)
-	}
+	render(result.urlsWithCount)
 }

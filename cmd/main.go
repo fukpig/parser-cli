@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/fukpig/parser-cli"
+	parsercli "github.com/fukpig/parsercli"
 )
 
 func main() {
 	urls := flag.String("urls", "", "a string")
 	searchURL := flag.String("search", "", "a string")
+	maxGoroutines := flag.Int("processes", 2, "an int")
 	flag.Parse()
 
 	if *urls == "" {
@@ -23,5 +24,5 @@ func main() {
 		os.Exit(1)
 	}
 
-	parser.Parse(*urls, *searchURL)
+	parsercli.Parse(*urls, *searchURL, *maxGoroutines)
 }
