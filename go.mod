@@ -1,3 +1,3 @@
-module github.com/fukpig/parser-cli
+module github.com/fukpig/parsercli
 
 go 1.12
