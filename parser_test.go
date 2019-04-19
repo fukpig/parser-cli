@@ -1,6 +1,7 @@
 package parsercli
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -15,9 +16,14 @@ func TestScrappingWithHref(t *testing.T) {
 	}))
 	defer ts.Close()
 
+	ctx := context.Background()
+	ctx, cancel := context.WithCancel(ctx)
+
+	defer cancel()
+
 	findSubstringRegExp := regexp.MustCompile("href")
 
-	if result := scrapCount(ts.Client(), ts.URL, findSubstringRegExp, 2); result != 1 {
+	if result := scrapCount(ctx, ts.Client(), ts.URL, findSubstringRegExp, 2); result != 1 {
 		t.Errorf("Expected count hrefs of 1, but it was %d .", result)
 	}
 }
@@ -29,9 +35,14 @@ func TestScrappingWithoutHref(t *testing.T) {
 	}))
 	defer ts.Close()
 
+	ctx := context.Background()
+	ctx, cancel := context.WithCancel(ctx)
+
+	defer cancel()
+
 	findSubstringRegExp := regexp.MustCompile("href")
 
-	if result := scrapCount(ts.Client(), ts.URL, findSubstringRegExp, 2); result != 0 {
+	if result := scrapCount(ctx, ts.Client(), ts.URL, findSubstringRegExp, 2); result != 0 {
 		t.Errorf("Expected count hrefs of 0, but it was %d .", result)
 	}
 }
