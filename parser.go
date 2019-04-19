@@ -17,11 +17,6 @@ type resultStruct struct {
 	locker        sync.RWMutex
 }
 
-var (
-	ctx    context.Context
-	cancel context.CancelFunc
-)
-
 //render generate output Url - count
 func render(urlsResult map[string]int) {
 	for key, value := range urlsResult {
@@ -30,9 +25,9 @@ func render(urlsResult map[string]int) {
 }
 
 //scrapCount get html by url and find by regexp count matches
-func scrapCount(client *http.Client, targetURL string, substringRegExp *regexp.Regexp, timeout int) int {
-	ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+func scrapCount(ctx context.Context, client *http.Client, targetURL string, substringRegExp *regexp.Regexp, timeout int) int {
+	ctxTimeout, timeoutCancel := context.WithTimeout(ctx, 5*time.Second)
+	defer timeoutCancel()
 
 	req, err := http.NewRequest("GET", targetURL, nil)
 	if err != nil {
@@ -40,7 +35,7 @@ func scrapCount(client *http.Client, targetURL string, substringRegExp *regexp.R
 		return 0
 	}
 
-	resp, err := http.DefaultClient.Do(req.WithContext(ctx))
+	resp, err := http.DefaultClient.Do(req.WithContext(ctxTimeout))
 	if err != nil {
 		fmt.Println(err)
 		return 0
@@ -62,7 +57,7 @@ func scrapCount(client *http.Client, targetURL string, substringRegExp *regexp.R
 }
 
 //Parse get array of urls and parse them to find occurrences of search string
-func Parse(urls, searchURL string, maxGoroutines, timeout int) {
+func Parse(ctx context.Context, urls, searchURL string, maxGoroutines, timeout int) {
 	limiter := make(chan struct{}, maxGoroutines)
 
 	urlList := strings.Split(urls, ",")
@@ -76,7 +71,7 @@ func Parse(urls, searchURL string, maxGoroutines, timeout int) {
 	result := resultStruct{urlsWithCount: make(map[string]int, len(urlList))}
 	for _, url := range urlList {
 		wg.Add(1)
-		go func(targetURL string, substringRegExp *regexp.Regexp, timeout int) {
+		go func(ctx context.Context, targetURL string, substringRegExp *regexp.Regexp, timeout int) {
 			defer wg.Done()
 			defer result.locker.Unlock()
 			defer func(ch <-chan struct{}) {
@@ -85,9 +80,9 @@ func Parse(urls, searchURL string, maxGoroutines, timeout int) {
 			limiter <- struct{}{}
 
 			result.locker.Lock()
-			result.urlsWithCount[targetURL] = scrapCount(client, targetURL, substringRegExp, timeout)
+			result.urlsWithCount[targetURL] = scrapCount(ctx, client, targetURL, substringRegExp, timeout)
 
-		}(url, findSubstringRegExp, timeout)
+		}(ctx, url, findSubstringRegExp, timeout)
 	}
 	wg.Wait()
 

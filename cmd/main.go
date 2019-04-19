@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -17,6 +18,9 @@ func main() {
 	timeout := flag.Int("timeput", 5, "an int")
 	flag.Parse()
 
+	ctx := context.Background()
+	ctx, cancel := context.WithCancel(ctx)
+
 	if *urls == "" {
 		fmt.Println("urlList are empty")
 		os.Exit(1)
@@ -30,9 +34,10 @@ func main() {
 	c := make(chan os.Signal)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
+		cancel()
 		<-c
 		os.Exit(1)
 	}()
 
-	parsercli.Parse(*urls, *searchURL, *maxGoroutines, *timeout)
+	parsercli.Parse(ctx, *urls, *searchURL, *maxGoroutines, *timeout)
 }
