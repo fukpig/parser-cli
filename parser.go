@@ -4,12 +4,8 @@ package parsercli
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
-	"net/http"
-	"regexp"
 	"strings"
 	"sync"
-	"time"
 )
 
 type resultStruct struct {
@@ -24,15 +20,89 @@ func (r *resultStruct) addCountToURL(targetURL string, count int) {
 	r.mx.Unlock()
 }
 
+type contextKey string
+
+var (
+	urlsSize = contextKey("urlsSize")
+)
+
+func getUrls(ctx context.Context, urls string) (chan string, context.Context) {
+	var wg sync.WaitGroup
+
+	urlList := strings.Split(urls, ",")
+	ctx = context.WithValue(ctx, urlsSize, len(urlList))
+	urlsChan := make(chan string, len(urlList))
+
+	defer close(urlsChan)
+	for _, url := range urlList {
+		wg.Add(1)
+		go func(ctx context.Context, urlsChan chan string, url string) {
+			defer wg.Done()
+			fmt.Println(url)
+			urlsChan <- url
+		}(ctx, urlsChan, url)
+	}
+	wg.Wait()
+	return urlsChan, ctx
+}
+
+func getHTML(ctx context.Context, urlsChan chan string) chan string {
+	var wg sync.WaitGroup
+
+	urlsSize, _ := ctx.Value(urlsSize).(int)
+
+	htmlChan := make(chan string, urlsSize)
+	defer close(htmlChan)
+
+	for url, ok := <-urlsChan; ok; url, ok = <-urlsChan {
+		wg.Add(1)
+		go func(htmlChan chan string, url string) {
+			defer wg.Done()
+			fmt.Println("get html", url)
+			htmlChan <- url
+		}(htmlChan, url)
+	}
+	wg.Wait()
+	return htmlChan
+}
+
+func parseHTML(ctx context.Context, htmlChan chan string, searchString string) chan string {
+	var wg sync.WaitGroup
+	urlsSize, _ := ctx.Value(urlsSize).(int)
+	occurrencesChan := make(chan string, urlsSize)
+
+	for url, ok := <-htmlChan; ok; url, ok = <-htmlChan {
+		wg.Add(1)
+		go func(htmlChan chan string, url string) {
+			defer wg.Done()
+			fmt.Println("get html", url)
+			occurrencesChan <- url
+		}(occurrencesChan, url)
+	}
+
+	wg.Wait()
+	close(occurrencesChan)
+	return occurrencesChan
+}
+
 //render generate output Url - count
-func render(urlsResult map[string]int) {
+func render(ctx context.Context, occurrencesChan chan string) {
+	fmt.Println("render")
+	go func(occurrencesChan chan string) {
+		for url := range occurrencesChan {
+			fmt.Println("render html", url)
+		}
+	}(occurrencesChan)
+}
+
+/*func render(urlsResult map[string]int) {
 	for key, value := range urlsResult {
 		fmt.Println(key, " - ", value)
 	}
-}
+}*/
 
 //scrapCount get html by url and find by regexp count matches
-func scrapCount(
+/*func scrapCount(
 	ctx context.Context,
 	client *http.Client,
 	targetURL string,
@@ -67,11 +137,15 @@ func scrapCount(
 		matchesCount = len(matches)
 	}
 	return matchesCount
-}
+}*/
 
 //Parse get array of urls and parse them to find occurrences of search string
-func Parse(ctx context.Context, urls, searchURL string, maxGoroutines, timeout int) {
-	limiter := make(chan struct{}, maxGoroutines)
+func Parse(ctx context.Context, urls, searchString string, maxGoroutines, timeout int) {
+	urlsChan, ctx := getUrls(ctx, urls)
+	htmlChan := getHTML(ctx, urlsChan)
+	occurrencesChan := parseHTML(ctx, htmlChan, searchString)
+	render(ctx, occurrencesChan)
+	/*limiter := make(chan struct{}, maxGoroutines)
 
 	urlList := strings.Split(urls, ",")
 
@@ -98,5 +172,5 @@ func Parse(ctx context.Context, urls, searchURL string, maxGoroutines, timeout i
 	}
 	wg.Wait()
 
-	render(result.urlsWithCount)
+	render(result.urlsWithCount)*/
 }
