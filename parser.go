@@ -4,33 +4,55 @@ package parsercli
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
+	"net/http"
 	"strings"
 	"sync"
+	"time"
 )
 
 type resultStruct struct {
-	urlsWithCount map[string]int
-	mx            sync.RWMutex
+	url   string
+	count int
 }
 
-//addCountToUrl add count of occurrences to targetURL
-func (r *resultStruct) addCountToURL(targetURL string, count int) {
-	r.mx.Lock()
-	r.urlsWithCount[targetURL] = count
-	r.mx.Unlock()
+type parserStruct struct {
+	url  string
+	html string
 }
 
-type contextKey string
+func scrap(ctx context.Context, client *http.Client, timeout int, targetURL string) string {
 
-var (
-	urlsSize = contextKey("urlsSize")
-)
+	ctxTimeout, timeoutCancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
+	defer timeoutCancel()
 
-func getUrls(ctx context.Context, urls string) (chan string, context.Context) {
+	req, err := http.NewRequest("GET", targetURL, nil)
+	if err != nil {
+		fmt.Println(err)
+		return ""
+	}
+
+	resp, err := client.Do(req.WithContext(ctxTimeout))
+
+	if err != nil {
+		fmt.Println(err)
+		return ""
+	}
+	defer resp.Body.Close()
+	htmlBytes, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Println(err)
+		return ""
+	}
+
+	html := string(htmlBytes)
+	return html
+}
+
+func getUrls(ctx context.Context, urls string) chan string {
 	var wg sync.WaitGroup
 
 	urlList := strings.Split(urls, ",")
-	ctx = context.WithValue(ctx, urlsSize, len(urlList))
 	urlsChan := make(chan string, len(urlList))
 
 	defer close(urlsChan)
@@ -38,59 +60,70 @@ func getUrls(ctx context.Context, urls string) (chan string, context.Context) {
 		wg.Add(1)
 		go func(ctx context.Context, urlsChan chan string, url string) {
 			defer wg.Done()
-			fmt.Println(url)
 			urlsChan <- url
 		}(ctx, urlsChan, url)
 	}
 	wg.Wait()
-	return urlsChan, ctx
+	return urlsChan
 }
 
-func getHTML(ctx context.Context, urlsChan chan string) chan string {
+func getHTML(ctx context.Context, urlsChan chan string, timeout int) chan parserStruct {
 	var wg sync.WaitGroup
+	htmlChan := make(chan parserStruct)
+	client := &http.Client{}
 
-	urlsSize, _ := ctx.Value(urlsSize).(int)
-
-	htmlChan := make(chan string, urlsSize)
-	defer close(htmlChan)
-
-	for url, ok := <-urlsChan; ok; url, ok = <-urlsChan {
-		wg.Add(1)
-		go func(htmlChan chan string, url string) {
-			defer wg.Done()
+	wg.Add(1)
+	go func(ctx context.Context, client *http.Client, timeout int) {
+		for url := range urlsChan {
 			fmt.Println("get html", url)
-			htmlChan <- url
-		}(htmlChan, url)
-	}
-	wg.Wait()
+			html := scrap(ctx, client, timeout, url)
+			htmlChan <- parserStruct{url: url, html: html}
+		}
+		defer wg.Done()
+	}(ctx, client, timeout)
+	go func() {
+		wg.Wait()
+		close(htmlChan)
+		fmt.Println("finished")
+	}()
+
 	return htmlChan
 }
 
-func parseHTML(ctx context.Context, htmlChan chan string, searchString string) chan string {
+func parseHTML(ctx context.Context, htmlChan chan parserStruct, searchString string) chan string {
+	fmt.Println("parse")
 	var wg sync.WaitGroup
-	urlsSize, _ := ctx.Value(urlsSize).(int)
-	occurrencesChan := make(chan string, urlsSize)
 
-	for url, ok := <-htmlChan; ok; url, ok = <-htmlChan {
-		wg.Add(1)
-		go func(htmlChan chan string, url string) {
-			defer wg.Done()
-			fmt.Println("get html", url)
-			occurrencesChan <- url
-		}(occurrencesChan, url)
-	}
+	occurrencesChan := make(chan string)
 
-	wg.Wait()
-	close(occurrencesChan)
+	wg.Add(1)
+	go func() {
+		for parserInfo := range htmlChan {
+			//go func(htmlChan chan string, url string) {
+			fmt.Println("parse html", parserInfo)
+			occurrencesChan <- parserInfo.url
+			//}(occurrencesChan, url)
+		}
+		wg.Done()
+	}()
+
+	go func() {
+		wg.Wait()
+		close(occurrencesChan)
+	}()
+
 	return occurrencesChan
 }
 
 //render generate output Url - count
 func render(ctx context.Context, occurrencesChan chan string) {
 	fmt.Println("render")
+	var mx sync.RWMutex
 	go func(occurrencesChan chan string) {
 		for url := range occurrencesChan {
+			mx.Lock()
 			fmt.Println("render html", url)
+			mx.Unlock()
 		}
 	}(occurrencesChan)
 }
@@ -141,8 +174,8 @@ func render(ctx context.Context, occurrencesChan chan string) {
 
 //Parse get array of urls and parse them to find occurrences of search string
 func Parse(ctx context.Context, urls, searchString string, maxGoroutines, timeout int) {
-	urlsChan, ctx := getUrls(ctx, urls)
-	htmlChan := getHTML(ctx, urlsChan)
+	urlsChan := getUrls(ctx, urls)
+	htmlChan := getHTML(ctx, urlsChan, timeout)
 	occurrencesChan := parseHTML(ctx, htmlChan, searchString)
 	render(ctx, occurrencesChan)
 	/*limiter := make(chan struct{}, maxGoroutines)

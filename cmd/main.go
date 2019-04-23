@@ -15,7 +15,7 @@ func main() {
 	urls := flag.String("urls", "", "a string")
 	searchURL := flag.String("search", "", "a string")
 	maxGoroutines := flag.Int("processes", 2, "an int")
-	timeout := flag.Int("timeput", 5, "an int")
+	timeout := flag.Int("timeout", 5, "an int")
 	flag.Parse()
 
 	ctx := context.Background()
