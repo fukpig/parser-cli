@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 
 	parsercli "github.com/fukpig/parsercli"
@@ -17,6 +18,8 @@ func main() {
 	maxGoroutines := flag.Int("processes", 2, "an int")
 	timeout := flag.Int("timeout", 5, "an int")
 	flag.Parse()
+
+	var wg sync.WaitGroup
 
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
@@ -39,5 +42,7 @@ func main() {
 		os.Exit(1)
 	}()
 
-	parsercli.Parse(ctx, *urls, *searchURL, *maxGoroutines, *timeout)
+	wg.Add(1)
+	go parsercli.Parse(ctx, &wg, *urls, *searchURL, *maxGoroutines, *timeout)
+	wg.Wait()
 }
