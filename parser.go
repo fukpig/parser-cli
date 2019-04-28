@@ -12,6 +12,13 @@ import (
 	"time"
 )
 
+type htmlParams struct {
+	ctx           context.Context
+	client        *http.Client
+	timeout       int
+	maxGoroutines int
+}
+
 type resultStruct struct {
 	url   string
 	count int
@@ -45,7 +52,7 @@ func scrap(ctx context.Context, client *http.Client, timeout int, targetURL stri
 	}
 
 	html := string(htmlBytes)
-	return html
+	return strings.TrimSpace(html)
 }
 
 func countMatches(html string, substringRegExp *regexp.Regexp) int {
@@ -68,33 +75,34 @@ func getUrls(urls string) chan string {
 	return urlsChan
 }
 
-func getHTML(ctx context.Context, urlsChan chan string, timeout, maxGoroutines int) chan parserStruct {
+func getHTML(params htmlParams, urlsChan chan string) chan parserStruct {
 
 	htmlChan := make(chan parserStruct)
 	client := &http.Client{}
+	params.client = client
 
-	go func(ctx context.Context, client *http.Client, timeout, maxGoroutines int, urlsChan chan string) {
+	go func(params htmlParams) {
 		var wg sync.WaitGroup
-		limiter := make(chan struct{}, maxGoroutines)
+		limiter := make(chan struct{}, params.maxGoroutines)
 
 		for url := range urlsChan {
 			wg.Add(1)
-			go func(ctx context.Context, client *http.Client, timeout int, url string) {
+			go func(params htmlParams, limiter chan struct{}, url string) {
 				defer wg.Done()
 				defer func(ch <-chan struct{}) {
 					<-ch
 				}(limiter)
 				limiter <- struct{}{}
-				html := scrap(ctx, client, timeout, url)
+				html := scrap(params.ctx, params.client, params.timeout, url)
 				htmlChan <- parserStruct{url: url, html: html}
 
-			}(ctx, client, timeout, url)
+			}(params, limiter, url)
 		}
 
 		wg.Wait()
 		close(htmlChan)
 
-	}(ctx, client, timeout, maxGoroutines, urlsChan)
+	}(params)
 	return htmlChan
 }
 
@@ -140,10 +148,93 @@ func render(occurrencesChan chan resultStruct) {
 }
 
 //Parse get array of urls and parse them to find occurrences of search string
-func Parse(ctx context.Context, wg *sync.WaitGroup, urls, searchString string, maxGoroutines, timeout int) {
+func Parse(ctx context.Context, wg *sync.WaitGroup, urls, searchString string, parsingProcessesCount, countingProcessesCount, timeout int) {
+
+	htmlParams := htmlParams{
+		ctx:           ctx,
+		timeout:       timeout,
+		maxGoroutines: parsingProcessesCount,
+	}
+
 	defer wg.Done()
 	urlsChan := getUrls(urls)
-	htmlChan := getHTML(ctx, urlsChan, timeout, maxGoroutines)
-	occurrencesChan := parseHTML(htmlChan, searchString, maxGoroutines)
+	htmlChan := getHTML(htmlParams, urlsChan)
+	occurrencesChan := parseHTML(htmlChan, searchString, countingProcessesCount)
+	render(occurrencesChan)
+}
+
+func getUrlsPreload(urlList []string) chan string {
+	urlsChan := make(chan string, len(urlList))
+
+	go func(urlsChan chan string, urlList []string) {
+		defer close(urlsChan)
+
+		for _, url := range urlList {
+			urlsChan <- url
+		}
+	}(urlsChan, urlList)
+	return urlsChan
+}
+
+func getHTMLPreload(params htmlParams, urlsChan chan string, urlsCount int) chan parserStruct {
+
+	htmlChan := make(chan parserStruct)
+	client := &http.Client{}
+	params.client = client
+	go func() {
+		var wg sync.WaitGroup
+		for i := 1; i <= urlsCount; i++ {
+			wg.Add(1)
+			go func(params htmlParams) {
+				defer wg.Done()
+				url := <-urlsChan
+				html := scrap(params.ctx, params.client, params.timeout, url)
+				htmlChan <- parserStruct{url: url, html: html}
+			}(params)
+		}
+		wg.Wait()
+		close(htmlChan)
+	}()
+	return htmlChan
+}
+
+func parseHTMLPreload(htmlChan chan parserStruct, searchString string, urlsCount int) chan resultStruct {
+	occurrencesChan := make(chan resultStruct)
+	findSubstringRegExp := regexp.MustCompile(searchString)
+
+	go func() {
+		var wg sync.WaitGroup
+		for i := 1; i <= urlsCount; i++ {
+			wg.Add(1)
+			go func(htmlChan chan parserStruct) {
+				defer wg.Done()
+				info := <-htmlChan
+				count := countMatches(info.html, findSubstringRegExp)
+				occurrencesChan <- resultStruct{url: info.url, count: count}
+			}(htmlChan)
+		}
+		wg.Wait()
+		close(occurrencesChan)
+	}()
+
+	return occurrencesChan
+}
+
+//PipelineWithPreloadGoroutines pipeline with preload goroutines
+func PipelineWithPreloadGoroutines(ctx context.Context, wg *sync.WaitGroup, urls, searchString string, parsingProcessesCount, countingProcessesCount, timeout int) {
+	htmlParams := htmlParams{
+		ctx:           ctx,
+		timeout:       timeout,
+		maxGoroutines: parsingProcessesCount,
+	}
+
+	defer wg.Done()
+
+	urlList := strings.Split(urls, ",")
+	urlsCount := len(urlList)
+
+	urlsChan := getUrlsPreload(urlList)
+	htmlChan := getHTMLPreload(htmlParams, urlsChan, urlsCount)
+	occurrencesChan := parseHTMLPreload(htmlChan, searchString, urlsCount)
 	render(occurrencesChan)
 }

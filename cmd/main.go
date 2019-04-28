@@ -15,7 +15,8 @@ import (
 func main() {
 	urls := flag.String("urls", "", "a string")
 	searchURL := flag.String("search", "", "a string")
-	maxGoroutines := flag.Int("processes", 2, "an int")
+	parsingProcessesCount := flag.Int("parsingProccessesCount", 5, "an int")
+	countingProcessesCount := flag.Int("countingProccessesCount", 5, "an int")
 	timeout := flag.Int("timeout", 5, "an int")
 	flag.Parse()
 
@@ -43,6 +44,7 @@ func main() {
 	}()
 
 	wg.Add(1)
-	go parsercli.Parse(ctx, &wg, *urls, *searchURL, *maxGoroutines, *timeout)
+	//go parsercli.Parse(ctx, &wg, *urls, *searchURL, *parsingProcessesCount, *countingProcessesCount, *timeout)
+	go parsercli.PipelineWithPreloadGoroutines(ctx, &wg, *urls, *searchURL, *parsingProcessesCount, *countingProcessesCount, *timeout)
 	wg.Wait()
 }
