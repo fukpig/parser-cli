@@ -12,6 +12,15 @@ import (
 	"time"
 )
 
+//PipelineConfig contains main options of pipeline
+type PipelineConfig struct {
+	Ctx                    context.Context
+	Wg                     *sync.WaitGroup
+	ParsingProcessesCount  int
+	CountingProcessesCount int
+	Timeout                int
+}
+
 type htmlParams struct {
 	ctx           context.Context
 	client        *http.Client
@@ -221,14 +230,14 @@ func parseHTMLPreload(htmlChan chan parserStruct, searchString string, urlsCount
 }
 
 //PipelineWithPreloadGoroutines pipeline with preload goroutines
-func PipelineWithPreloadGoroutines(ctx context.Context, wg *sync.WaitGroup, urls, searchString string, parsingProcessesCount, countingProcessesCount, timeout int) {
+func PipelineWithPreloadGoroutines(config PipelineConfig, urls, searchString string) {
 	htmlParams := htmlParams{
-		ctx:           ctx,
-		timeout:       timeout,
-		maxGoroutines: parsingProcessesCount,
+		ctx:           config.Ctx,
+		timeout:       config.Timeout,
+		maxGoroutines: config.ParsingProcessesCount,
 	}
 
-	defer wg.Done()
+	defer config.Wg.Done()
 
 	urlList := strings.Split(urls, ",")
 	urlsCount := len(urlList)

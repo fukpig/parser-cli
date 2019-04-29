@@ -9,8 +9,9 @@ import (
 	"testing"
 )
 
+const html = "<html><head><head><body><a href=\"123\">Hello</a><h1>Test</h1></body></html>"
+
 func TestScrap(t *testing.T) {
-	html := "<html><head><head><body><a href=\"123\">Hello</a><h1>Test</h1></body></html>"
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		fmt.Fprintln(w, html)
@@ -32,7 +33,6 @@ func TestScrap(t *testing.T) {
 func TestCountMatches(t *testing.T) {
 	findSubstringRegExp := regexp.MustCompile("href")
 
-	html := "<html><head><head><body><a href=\"123\">Hello</a><h1>Test</h1></body></html>"
 	if resultWithOneMatch := countMatches(html, findSubstringRegExp); resultWithOneMatch != 1 {
 		t.Errorf("Expected count hrefs of 1, but it was %d .", resultWithOneMatch)
 	}
@@ -59,7 +59,6 @@ func TestGetUrls(t *testing.T) {
 }
 
 func TestGetHTML(t *testing.T) {
-	html := "<html><head><head><body><a href=\"123\">Hello</a><h1>Test</h1></body></html>"
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		fmt.Fprintln(w, html)
@@ -99,8 +98,6 @@ func TestGetHTML(t *testing.T) {
 }
 
 func TestParseHTML(t *testing.T) {
-	html := "<html><head><head><body><a href=\"123\">Hello</a><h1>Test</h1></body></html>"
-
 	maxGoroutines := 2
 
 	htmlChan := make(chan parserStruct)

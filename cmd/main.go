@@ -14,7 +14,7 @@ import (
 
 func main() {
 	urls := flag.String("urls", "", "a string")
-	searchURL := flag.String("search", "", "a string")
+	searchString := flag.String("search", "", "a string")
 	parsingProcessesCount := flag.Int("parsingProccessesCount", 5, "an int")
 	countingProcessesCount := flag.Int("countingProccessesCount", 5, "an int")
 	timeout := flag.Int("timeout", 5, "an int")
@@ -30,7 +30,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if *searchURL == "" {
+	if *searchString == "" {
 		fmt.Println("search url is empty")
 		os.Exit(1)
 	}
@@ -44,7 +44,16 @@ func main() {
 	}()
 
 	wg.Add(1)
-	//go parsercli.Parse(ctx, &wg, *urls, *searchURL, *parsingProcessesCount, *countingProcessesCount, *timeout)
-	go parsercli.PipelineWithPreloadGoroutines(ctx, &wg, *urls, *searchURL, *parsingProcessesCount, *countingProcessesCount, *timeout)
+
+	config := parsercli.PipelineConfig{
+		Ctx:                    ctx,
+		Wg:                     &wg,
+		ParsingProcessesCount:  *parsingProcessesCount,
+		CountingProcessesCount: *countingProcessesCount,
+		Timeout:                *timeout,
+	}
+
+	//go parsercli.Parse(ctx, &wg, *urls, *searchString, *parsingProcessesCount, *countingProcessesCount, *timeout)
+	go parsercli.PipelineWithPreloadGoroutines(config, *urls, *searchString)
 	wg.Wait()
 }
