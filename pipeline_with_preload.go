@@ -36,14 +36,12 @@ func (p pipelinePreload) getHTMLPreload(params htmlParams, urlsChan chan string,
 			go func(params htmlParams) {
 				defer wg.Done()
 				for {
-					select {
-					case url, ok := <-urlsChan:
-						if !ok {
-							return
-						}
-						html := scrap(params.ctx, params.client, params.timeout, url)
-						htmlChan <- parserStruct{url: url, html: html}
+					url, ok := <-urlsChan
+					if !ok {
+						return
 					}
+					html := scrap(params.ctx, params.client, params.timeout, url)
+					htmlChan <- parserStruct{url: url, html: html}
 				}
 			}(params)
 		}
@@ -64,14 +62,12 @@ func (p pipelinePreload) parseHTMLPreload(htmlChan chan parserStruct, searchStri
 			go func(htmlChan chan parserStruct) {
 				defer wg.Done()
 				for {
-					select {
-					case info, ok := <-htmlChan:
-						if !ok {
-							return
-						}
-						count := countMatches(info.html, findSubstringRegExp)
-						occurrencesChan <- resultStruct{url: info.url, count: count}
+					info, ok := <-htmlChan
+					if !ok {
+						return
 					}
+					count := countMatches(info.html, findSubstringRegExp)
+					occurrencesChan <- resultStruct{url: info.url, count: count}
 				}
 			}(htmlChan)
 		}
