@@ -5,48 +5,25 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"regexp"
 	"testing"
 )
 
-const html = "<html><head><head><body><a href=\"123\">Hello</a><h1>Test</h1></body></html>"
-
-func TestScrap(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprintln(w, html)
-	}))
-	defer ts.Close()
-
+func TestGetUrls(t *testing.T) {
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
-
 	defer cancel()
 
-	timeout := 2
-
-	if result := scrap(ctx, ts.Client(), timeout, ts.URL); result != html {
-		t.Errorf("Expected another html, but it was %s .", result)
+	config := PipelineConfig{
+		Ctx:                    ctx,
+		ParsingProcessesCount:  2,
+		CountingProcessesCount: 2,
+		Timeout:                5,
 	}
-}
+	pipeline := pipelineCommon{config: config}
 
-func TestCountMatches(t *testing.T) {
-	findSubstringRegExp := regexp.MustCompile("href")
-
-	if resultWithOneMatch := countMatches(html, findSubstringRegExp); resultWithOneMatch != 1 {
-		t.Errorf("Expected count hrefs of 1, but it was %d .", resultWithOneMatch)
-	}
-
-	htmlWithoutHref := "<html><head><head><body><a>Hello</a><h1>Test</h1></body></html>"
-	if resultWithZeroMatch := countMatches(htmlWithoutHref, findSubstringRegExp); resultWithZeroMatch != 0 {
-		t.Errorf("Expected count hrefs of 0, but it was %d .", resultWithZeroMatch)
-	}
-}
-
-func TestGetUrls(t *testing.T) {
 	urlsList := "https://google.com,https://yandex.kz"
 
-	urlsChan := getUrls(urlsList)
+	urlsChan := pipeline.getUrls(urlsList)
 
 	firstURL := <-urlsChan
 	if firstURL != "https://google.com" {
@@ -59,16 +36,23 @@ func TestGetUrls(t *testing.T) {
 }
 
 func TestGetHTML(t *testing.T) {
+	ctx := context.Background()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	config := PipelineConfig{
+		Ctx:                    ctx,
+		ParsingProcessesCount:  2,
+		CountingProcessesCount: 2,
+		Timeout:                5,
+	}
+	pipeline := pipelineCommon{config: config}
+
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		fmt.Fprintln(w, html)
 	}))
 	defer ts.Close()
-
-	ctx := context.Background()
-	ctx, cancel := context.WithCancel(ctx)
-
-	defer cancel()
 
 	timeout := 2
 
@@ -85,7 +69,7 @@ func TestGetHTML(t *testing.T) {
 		maxGoroutines: 2,
 	}
 
-	htmlChan := getHTML(htmlParams, urlsChan)
+	htmlChan := pipeline.getHTML(htmlParams, urlsChan)
 
 	result := <-htmlChan
 	if result.url != ts.URL {
@@ -100,6 +84,18 @@ func TestGetHTML(t *testing.T) {
 func TestParseHTML(t *testing.T) {
 	maxGoroutines := 2
 
+	ctx := context.Background()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	config := PipelineConfig{
+		Ctx:                    ctx,
+		ParsingProcessesCount:  2,
+		CountingProcessesCount: 2,
+		Timeout:                5,
+	}
+	pipeline := pipelineCommon{config: config}
+
 	htmlChan := make(chan parserStruct)
 
 	go func() {
@@ -107,7 +103,7 @@ func TestParseHTML(t *testing.T) {
 		close(htmlChan)
 	}()
 
-	occurrencesChan := parseHTML(htmlChan, "href", maxGoroutines)
+	occurrencesChan := pipeline.parseHTML(htmlChan, "href", maxGoroutines)
 
 	result := <-occurrencesChan
 	if result.url != "http://test.kz" {

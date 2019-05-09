@@ -40,6 +40,9 @@ func main() {
 	go func() {
 		<-c
 		cancel()
+		fmt.Println("cancelled")
+		wg.Wait()
+		fmt.Println("end")
 		os.Exit(1)
 	}()
 
@@ -47,13 +50,13 @@ func main() {
 
 	config := parsercli.PipelineConfig{
 		Ctx:                    ctx,
-		Wg:                     &wg,
 		ParsingProcessesCount:  *parsingProcessesCount,
 		CountingProcessesCount: *countingProcessesCount,
 		Timeout:                *timeout,
 	}
 
 	//go parsercli.Parse(ctx, &wg, *urls, *searchString, *parsingProcessesCount, *countingProcessesCount, *timeout)
-	go parsercli.PipelineWithPreloadGoroutines(config, *urls, *searchString)
+	//go parsercli.PipelineWithPreloadGoroutines(config, *urls, *searchString)
+	go parsercli.Parse(config, &wg, *urls, *searchString)
 	wg.Wait()
 }
