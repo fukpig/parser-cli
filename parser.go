@@ -3,25 +3,26 @@ package parsercli
 
 import (
 	"context"
-	"net/http"
 	"sync"
 )
 
+//nolint
 type pipeline interface {
-	run(string, string)
+	run(context.Context)
 }
 
 //PipelineConfig contains main options of pipeline
 type PipelineConfig struct {
-	Ctx                    context.Context
 	ParsingProcessesCount  int
 	CountingProcessesCount int
 	Timeout                int
+	PipelineType           string
+	Wg                     *sync.WaitGroup
+	Urls                   string
+	SearchString           string
 }
 
 type htmlParams struct {
-	ctx           context.Context
-	client        *http.Client
 	timeout       int
 	maxGoroutines int
 }
@@ -36,16 +37,15 @@ type parserStruct struct {
 	html string
 }
 
-func runPipeline(pipeline pipeline, urls, searchString string) {
-	pipeline.run(urls, searchString)
-}
-
 //Parse starting pipeline
-func Parse(config PipelineConfig, wg *sync.WaitGroup, urls, searchString string) {
-	pipelinePr := pipelinePreload{config: config}
-	runPipeline(pipelinePr, urls, searchString)
+func Parse(ctx context.Context, config PipelineConfig) {
 
-	//pipelineCommon := pipelineCommon{config: config}
-	//runPipeline(pipelineCommon, urls, searchString)
-	wg.Done()
+	var pipe pipeline
+	if config.PipelineType == "preload" {
+		pipe = pipelinePreload{config: config}
+	} else {
+		pipe = pipelineCommon{config: config}
+	}
+	pipe.run(ctx)
+	config.Wg.Done()
 }

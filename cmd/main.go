@@ -15,6 +15,7 @@ import (
 func main() {
 	urls := flag.String("urls", "", "a string")
 	searchString := flag.String("search", "", "a string")
+	pipelineType := flag.String("pipelineType", "common", "a string")
 	parsingProcessesCount := flag.Int("parsingProccessesCount", 5, "an int")
 	countingProcessesCount := flag.Int("countingProccessesCount", 5, "an int")
 	timeout := flag.Int("timeout", 5, "an int")
@@ -49,14 +50,15 @@ func main() {
 	wg.Add(1)
 
 	config := parsercli.PipelineConfig{
-		Ctx:                    ctx,
 		ParsingProcessesCount:  *parsingProcessesCount,
 		CountingProcessesCount: *countingProcessesCount,
 		Timeout:                *timeout,
+		PipelineType:           *pipelineType,
+		Wg:                     &wg,
+		Urls:                   *urls,
+		SearchString:           *searchString,
 	}
 
-	//go parsercli.Parse(ctx, &wg, *urls, *searchString, *parsingProcessesCount, *countingProcessesCount, *timeout)
-	//go parsercli.PipelineWithPreloadGoroutines(config, *urls, *searchString)
-	go parsercli.Parse(config, &wg, *urls, *searchString)
+	go parsercli.Parse(ctx, config)
 	wg.Wait()
 }

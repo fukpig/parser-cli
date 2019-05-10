@@ -1,6 +1,7 @@
 package parsercli
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -12,7 +13,7 @@ type pipelinePreload struct {
 	config PipelineConfig
 }
 
-func (p pipelinePreload) getUrlsPreload(urls string) chan string {
+func (p pipelinePreload) getUrlsPreload(urls string) (chan string, int) {
 	urlList := strings.Split(urls, ",")
 	urlsChan := make(chan string, len(urlList))
 
@@ -22,15 +23,14 @@ func (p pipelinePreload) getUrlsPreload(urls string) chan string {
 			urlsChan <- url
 		}
 	}(urlsChan, urlList)
-	return urlsChan
+	return urlsChan, len(urlList)
 }
 
-func (p pipelinePreload) getHTMLPreload(params htmlParams, urlsChan chan string, parsingProcessesCount int) chan parserStruct {
+func (p pipelinePreload) getHTMLPreload(ctx context.Context, params htmlParams, urlsChan chan string, parsingProcessesCount int) chan parserStruct {
 	var wg sync.WaitGroup
 	wg.Add(parsingProcessesCount)
 	htmlChan := make(chan parserStruct)
 	client := &http.Client{}
-	params.client = client
 	go func() {
 		for i := 1; i <= parsingProcessesCount; i++ {
 			go func(params htmlParams) {
@@ -40,7 +40,10 @@ func (p pipelinePreload) getHTMLPreload(params htmlParams, urlsChan chan string,
 					if !ok {
 						return
 					}
-					html := scrap(params.ctx, params.client, params.timeout, url)
+					html, err := scrap(ctx, client, params.timeout, url)
+					if err != nil {
+						continue
+					}
 					htmlChan <- parserStruct{url: url, html: html}
 				}
 			}(params)
@@ -52,10 +55,10 @@ func (p pipelinePreload) getHTMLPreload(params htmlParams, urlsChan chan string,
 	return htmlChan
 }
 
-func (p pipelinePreload) parseHTMLPreload(htmlChan chan parserStruct, searchString string, countingProcessesCount int) chan resultStruct {
+func (p pipelinePreload) parseHTMLPreload(htmlChan chan parserStruct, searchString string, countingProcessesCount, urlsCount int) chan resultStruct {
 	var wg sync.WaitGroup
 	wg.Add(countingProcessesCount)
-	occurrencesChan := make(chan resultStruct)
+	occurrencesChan := make(chan resultStruct, urlsCount)
 	findSubstringRegExp := regexp.MustCompile(searchString)
 	go func() {
 		for i := 1; i <= countingProcessesCount; i++ {
@@ -89,14 +92,13 @@ func (p pipelinePreload) render(occurrencesChan chan resultStruct) {
 	wg.Wait()
 }
 
-func (p pipelinePreload) run(urls, searchString string) {
-	htmlParams := htmlParams{
-		ctx:     p.config.Ctx,
+func (p pipelinePreload) run(ctx context.Context) {
+	params := htmlParams{
 		timeout: p.config.Timeout,
 	}
 
-	urlsChan := p.getUrlsPreload(urls)
-	htmlChan := p.getHTMLPreload(htmlParams, urlsChan, p.config.ParsingProcessesCount)
-	occurrencesChan := p.parseHTMLPreload(htmlChan, searchString, p.config.CountingProcessesCount)
+	urlsChan, urlsCount := p.getUrlsPreload(p.config.Urls)
+	htmlChan := p.getHTMLPreload(ctx, params, urlsChan, p.config.ParsingProcessesCount)
+	occurrencesChan := p.parseHTMLPreload(htmlChan, p.config.SearchString, p.config.CountingProcessesCount, urlsCount)
 	p.render(occurrencesChan)
 }

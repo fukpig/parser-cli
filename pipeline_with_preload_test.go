@@ -9,12 +9,7 @@ import (
 )
 
 func TestGetUrlsPreload(t *testing.T) {
-	ctx := context.Background()
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
 	config := PipelineConfig{
-		Ctx:                    ctx,
 		ParsingProcessesCount:  2,
 		CountingProcessesCount: 2,
 		Timeout:                5,
@@ -23,7 +18,11 @@ func TestGetUrlsPreload(t *testing.T) {
 
 	urlsList := "https://google.com,https://yandex.kz"
 
-	urlsChan := pipeline.getUrlsPreload(urlsList)
+	urlsChan, count := pipeline.getUrlsPreload(urlsList)
+
+	if count != 2 {
+		t.Errorf("Expected %d, found %d", 2, count)
+	}
 
 	firstURL := <-urlsChan
 	if firstURL != "https://google.com" {
@@ -41,7 +40,6 @@ func TestGetHTMLPreload(t *testing.T) {
 	defer cancel()
 
 	config := PipelineConfig{
-		Ctx:                    ctx,
 		ParsingProcessesCount:  2,
 		CountingProcessesCount: 2,
 		Timeout:                5,
@@ -63,13 +61,12 @@ func TestGetHTMLPreload(t *testing.T) {
 		close(urlsChan)
 	}()
 
-	htmlParams := htmlParams{
-		ctx:           ctx,
+	params := htmlParams{
 		timeout:       timeout,
 		maxGoroutines: 2,
 	}
 
-	htmlChan := pipeline.getHTMLPreload(htmlParams, urlsChan, config.ParsingProcessesCount)
+	htmlChan := pipeline.getHTMLPreload(ctx, params, urlsChan, config.ParsingProcessesCount)
 
 	result := <-htmlChan
 	if result.url != ts.URL {
@@ -82,12 +79,7 @@ func TestGetHTMLPreload(t *testing.T) {
 }
 
 func TestParseHTMLPreload(t *testing.T) {
-	ctx := context.Background()
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
 	config := PipelineConfig{
-		Ctx:                    ctx,
 		ParsingProcessesCount:  2,
 		CountingProcessesCount: 2,
 		Timeout:                5,
@@ -101,7 +93,7 @@ func TestParseHTMLPreload(t *testing.T) {
 		close(htmlChan)
 	}()
 
-	occurrencesChan := pipeline.parseHTMLPreload(htmlChan, "href", config.CountingProcessesCount)
+	occurrencesChan := pipeline.parseHTMLPreload(htmlChan, "href", config.CountingProcessesCount, 1)
 
 	result := <-occurrencesChan
 	if result.url != "http://test.kz" {

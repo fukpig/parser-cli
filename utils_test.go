@@ -25,8 +25,12 @@ func TestScrap(t *testing.T) {
 
 	timeout := 2
 
-	if result := scrap(ctx, ts.Client(), timeout, ts.URL); result != html {
+	result, err := scrap(ctx, ts.Client(), timeout, ts.URL)
+	if result != html {
 		t.Errorf("Expected another html, but it was %s .", result)
+	}
+	if err != nil {
+		t.Errorf("Expected no error, but it error")
 	}
 }
 

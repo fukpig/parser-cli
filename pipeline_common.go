@@ -1,6 +1,7 @@
 package parsercli
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -12,7 +13,7 @@ type pipelineCommon struct {
 	config PipelineConfig
 }
 
-func (p pipelineCommon) getUrls(urls string) chan string {
+func (p pipelineCommon) getUrls(urls string) (chan string, int) {
 	urlList := strings.Split(urls, ",")
 	urlsChan := make(chan string, len(urlList))
 
@@ -23,14 +24,13 @@ func (p pipelineCommon) getUrls(urls string) chan string {
 			urlsChan <- url
 		}
 	}(urlsChan, urlList)
-	return urlsChan
+	return urlsChan, len(urlList)
 }
 
-func (p pipelineCommon) getHTML(params htmlParams, urlsChan chan string) chan parserStruct {
+func (p pipelineCommon) getHTML(ctx context.Context, params htmlParams, urlsChan chan string) chan parserStruct {
 
 	htmlChan := make(chan parserStruct)
 	client := &http.Client{}
-	params.client = client
 
 	go func(params htmlParams) {
 		var wg sync.WaitGroup
@@ -44,7 +44,10 @@ func (p pipelineCommon) getHTML(params htmlParams, urlsChan chan string) chan pa
 					<-ch
 				}(limiter)
 				limiter <- struct{}{}
-				html := scrap(params.ctx, params.client, params.timeout, url)
+				html, err := scrap(ctx, client, params.timeout, url)
+				if err != nil {
+					return
+				}
 				htmlChan <- parserStruct{url: url, html: html}
 
 			}(params, limiter, url)
@@ -57,10 +60,11 @@ func (p pipelineCommon) getHTML(params htmlParams, urlsChan chan string) chan pa
 	return htmlChan
 }
 
-func (p pipelineCommon) parseHTML(htmlChan chan parserStruct,
+func (p pipelineCommon) parseHTML(
+	htmlChan chan parserStruct,
 	searchString string,
-	maxGoroutines int) chan resultStruct {
-	occurrencesChan := make(chan resultStruct)
+	maxGoroutines, urlsCount int) chan resultStruct {
+	occurrencesChan := make(chan resultStruct, urlsCount)
 	findSubstringRegExp := regexp.MustCompile(searchString)
 
 	limiter := make(chan struct{}, maxGoroutines)
@@ -98,15 +102,14 @@ func (p pipelineCommon) render(occurrencesChan chan resultStruct) {
 	wg.Wait()
 }
 
-func (p pipelineCommon) run(urls, searchString string) {
-	htmlParams := htmlParams{
-		ctx:           p.config.Ctx,
+func (p pipelineCommon) run(ctx context.Context) {
+	params := htmlParams{
 		timeout:       p.config.Timeout,
 		maxGoroutines: p.config.ParsingProcessesCount,
 	}
 
-	urlsChan := p.getUrls(urls)
-	htmlChan := p.getHTML(htmlParams, urlsChan)
-	occurrencesChan := p.parseHTML(htmlChan, searchString, p.config.CountingProcessesCount)
+	urlsChan, urlsCount := p.getUrls(p.config.Urls)
+	htmlChan := p.getHTML(ctx, params, urlsChan)
+	occurrencesChan := p.parseHTML(htmlChan, p.config.SearchString, p.config.CountingProcessesCount, urlsCount)
 	p.render(occurrencesChan)
 }
