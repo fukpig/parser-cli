@@ -6,7 +6,7 @@ import (
 	"sync"
 )
 
-//nolint
+//nolint:unused
 type pipeline interface {
 	run(context.Context)
 }

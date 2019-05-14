@@ -2,7 +2,6 @@ package parsercli
 
 import (
 	"context"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"regexp"
@@ -22,13 +21,11 @@ func scrap(ctx context.Context, client *http.Client, timeout int, targetURL stri
 
 	resp, err := client.Do(req.WithContext(ctxTimeout))
 	if err != nil {
-		fmt.Println(err)
 		return "", err
 	}
 	defer resp.Body.Close()
 	htmlBytes, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Println(err)
 		return "", err
 	}
 

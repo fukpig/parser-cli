@@ -13,7 +13,7 @@ type pipelinePreload struct {
 	config PipelineConfig
 }
 
-func (p pipelinePreload) getUrlsPreload(urls string) (chan string, int) {
+func (p pipelinePreload) getUrlsPreload(urls string) (<-chan string, int) {
 	urlList := strings.Split(urls, ",")
 	urlsChan := make(chan string, len(urlList))
 
@@ -26,7 +26,7 @@ func (p pipelinePreload) getUrlsPreload(urls string) (chan string, int) {
 	return urlsChan, len(urlList)
 }
 
-func (p pipelinePreload) getHTMLPreload(ctx context.Context, params htmlParams, urlsChan chan string, parsingProcessesCount int) chan parserStruct {
+func (p pipelinePreload) getHTMLPreload(ctx context.Context, params htmlParams, urlsChan <-chan string, parsingProcessesCount int) <-chan parserStruct {
 	var wg sync.WaitGroup
 	wg.Add(parsingProcessesCount)
 	htmlChan := make(chan parserStruct)
@@ -42,6 +42,7 @@ func (p pipelinePreload) getHTMLPreload(ctx context.Context, params htmlParams, 
 					}
 					html, err := scrap(ctx, client, params.timeout, url)
 					if err != nil {
+						fmt.Println(err)
 						continue
 					}
 					htmlChan <- parserStruct{url: url, html: html}
@@ -55,14 +56,14 @@ func (p pipelinePreload) getHTMLPreload(ctx context.Context, params htmlParams, 
 	return htmlChan
 }
 
-func (p pipelinePreload) parseHTMLPreload(htmlChan chan parserStruct, searchString string, countingProcessesCount, urlsCount int) chan resultStruct {
+func (p pipelinePreload) parseHTMLPreload(htmlChan <-chan parserStruct, searchString string, countingProcessesCount, urlsCount int) <-chan resultStruct {
 	var wg sync.WaitGroup
 	wg.Add(countingProcessesCount)
 	occurrencesChan := make(chan resultStruct, urlsCount)
 	findSubstringRegExp := regexp.MustCompile(searchString)
 	go func() {
 		for i := 1; i <= countingProcessesCount; i++ {
-			go func(htmlChan chan parserStruct) {
+			go func(htmlChan <-chan parserStruct) {
 				defer wg.Done()
 				for {
 					info, ok := <-htmlChan
@@ -80,13 +81,17 @@ func (p pipelinePreload) parseHTMLPreload(htmlChan chan parserStruct, searchStri
 	return occurrencesChan
 }
 
-func (p pipelinePreload) render(occurrencesChan chan resultStruct) {
+func (p pipelinePreload) render(occurrencesChan <-chan resultStruct) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		for resultStruct := range occurrencesChan {
-			fmt.Println(resultStruct.url, "-", resultStruct.count)
+		for result := range occurrencesChan {
+			wg.Add(1)
+			go func(result resultStruct) {
+				defer wg.Done()
+				fmt.Println(result.url, "-", result.count)
+			}(result)
 		}
 	}()
 	wg.Wait()
