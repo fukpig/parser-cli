@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 
 	parsercli "github.com/fukpig/parsercli"
@@ -13,10 +14,14 @@ import (
 
 func main() {
 	urls := flag.String("urls", "", "a string")
-	searchURL := flag.String("search", "", "a string")
-	maxGoroutines := flag.Int("processes", 2, "an int")
-	timeout := flag.Int("timeput", 5, "an int")
+	searchString := flag.String("search", "", "a string")
+	pipelineType := flag.String("pipelineType", "common", "a string")
+	parsingProcessesCount := flag.Int("parsingProccessesCount", 5, "an int")
+	countingProcessesCount := flag.Int("countingProccessesCount", 5, "an int")
+	timeout := flag.Int("timeout", 5, "an int")
 	flag.Parse()
+
+	var wg sync.WaitGroup
 
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
@@ -26,7 +31,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if *searchURL == "" {
+	if *searchString == "" {
 		fmt.Println("search url is empty")
 		os.Exit(1)
 	}
@@ -36,8 +41,24 @@ func main() {
 	go func() {
 		<-c
 		cancel()
+		fmt.Println("cancelled")
+		wg.Wait()
+		fmt.Println("end")
 		os.Exit(1)
 	}()
 
-	parsercli.Parse(ctx, *urls, *searchURL, *maxGoroutines, *timeout)
+	wg.Add(1)
+
+	config := parsercli.PipelineConfig{
+		ParsingProcessesCount:  *parsingProcessesCount,
+		CountingProcessesCount: *countingProcessesCount,
+		Timeout:                *timeout,
+		PipelineType:           *pipelineType,
+		Wg:                     &wg,
+		Urls:                   *urls,
+		SearchString:           *searchString,
+	}
+
+	go parsercli.Parse(ctx, config)
+	wg.Wait()
 }

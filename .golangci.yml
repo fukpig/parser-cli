@@ -1,0 +1,28 @@
+linters:
+  enable-all: true
+  disable-all: false
+  fast: false
+linters-settings:
+  lll:
+    line-length: 170
+  govet:
+    check-shadowing: true
+  golint:
+    min-confidence: 0
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+  gocyclo:
+    min-complexity: 10
+  maligned:
+    suggest-new: true
+  dupl:
+    threshold: 100
+  misspell:
+    locale: US
+  unused:
+    check-exported: true
+  unparam:
+    check-exported: true
+  prealloc:
+    for-loops: true
